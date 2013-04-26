@@ -22,5 +22,4 @@ Written in C with a BSD license. 100% test coverage.
 
 Building
 --------
-
 $make
