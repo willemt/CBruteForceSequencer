@@ -57,7 +57,6 @@ delta(0,1), delta(0,2), delta(0,3), delta(0,3), delta(0,3), delta(0,6)
 
 #include <stdlib.h>
 #include <stdio.h>
-#include <stdbool.h>
 #include <assert.h>
 #include "arrayqueue.h"
 #include "linked_list_hashmap.h"
@@ -72,7 +71,7 @@ typedef struct
 
 typedef struct
 {
-    bool isAcked;
+    int isAcked;
     int seqn;
     void *sobj;
 } sob_t;
@@ -93,8 +92,8 @@ typedef struct
 #define in(x) ((private_t*)x->in)
 
 
-/* integer object
- * please don't be negative */
+/* Integer object
+ * Please don't be negative */
 static unsigned long __ulong_hash(
     const void *e1
 )
@@ -116,23 +115,22 @@ static long __ulong_compare(
 }
 
 /**
- * Create a new sequencer
- */
+ * @return new sequencer */
 bfs_t *bfsequencer_new(
 )
 {
-    bfs_t *self;
+    bfs_t *me;
 
-    self = calloc(1,sizeof(bfs_t));
-    self->in = calloc(1,sizeof(private_t));
+    me = calloc(1,sizeof(bfs_t));
+    me->in = calloc(1,sizeof(private_t));
     /* a register of sequenced objects */
-    in(self)->sobjs = hashmap_new(__ulong_hash, __ulong_compare, 11);
+    in(me)->sobjs = hashmap_new(__ulong_hash, __ulong_compare, 11);
 
 //    hashmap_t *dic;
 //    dic = hashmap_initalloc(&teaObjUlong);
-//    arrayqueue_offer(in(self)->states, dic);
+//    arrayqueue_offer(in(me)->states, dic);
 
-    return self;
+    return me;
 }
 
 static void __sobj_release(
@@ -157,13 +155,12 @@ void bfsequencer_set_free_func(
 }
 
 /**
- * @return number of sequenced objects
- */
+ * @return number of sequenced objects */
 int bfsequencer_get_num_sobj(
-    bfs_t * self
+    bfs_t * me
 )
 {
-    return hashmap_count(in(self)->sobjs);
+    return hashmap_count(in(me)->sobjs);
 }
 
 static void __count_queue_count(
@@ -175,31 +172,27 @@ static void __count_queue_count(
 }
 
 /**
- * @return number of sequenced objects, even if the objects are duplicates
- */
-int bfsequencer_get_num_sobj_all(
-    bfs_t * self
-)
+ * @return number of sequenced objects, even if the objects are duplicates */
+int bfsequencer_get_num_sobj_all(bfs_t * me)
 {
     hashmap_iterator_t iter;
     int size = 0;
 
-    for (hashmap_iterator(in(self)->sobjs, &iter);
-            hashmap_iterator_has_next(in(self)->sobjs, &iter);)
+    for (hashmap_iterator(in(me)->sobjs, &iter);
+            hashmap_iterator_has_next(in(me)->sobjs, &iter);)
     {
         __count_queue_count(
-                hashmap_iterator_next_value(in(self)->sobjs, &iter),&size);
+                hashmap_iterator_next_value(in(me)->sobjs, &iter),&size);
     }
 
     return size;
 }
 
-/*-REMOVAL--------------------------------------------------------------------*/
-
 /**
- * Remove this sequenced object */
+ * Remove this sequenced object
+ * @param id The ID of the sequenced object to be removed */
 void bfsequencer_remove_sobj(
-    bfs_t * self,
+    bfs_t * me,
     unsigned long id
 )
 {
@@ -207,40 +200,38 @@ void bfsequencer_remove_sobj(
     arrayqueue_t *ss;
 
     /* remove from register */
-    if ((ss = hashmap_remove(in(self)->sobjs, (void *) id)))
+    if ((ss = hashmap_remove(in(me)->sobjs, (void *) id)))
     {
         /* empty all the sequences */
         while (!arrayqueue_is_empty(ss))
         {
-            __sobj_release(self, arrayqueue_poll(ss));
+            __sobj_release(me, arrayqueue_poll(ss));
         }
         arrayqueue_free(ss);
     }
 }
 
-/*----------------------------------------------------------------------------*/
-
 /**
- * @return last offered sequence number for this bfs
- */
+ * @return last offered sequence number for this bfs */
 int bfsequencer_get_last_offered_seqn(
-    bfs_t * self
+    bfs_t * me
 )
 {
-    return in(self)->seqn_newest;
+    return in(me)->seqn_newest;
 }
 
 /**
- * Register new sequenced object */
+ * Register new sequenced object
+ * @param id ID of the object to be registered */
 static arrayqueue_t* __register_new_sequenced_object(
-    bfs_t * self,
+    bfs_t * me,
     unsigned long id)
 
 {
     arrayqueue_t *ss;
 
     ss = arrayqueue_new();
-    hashmap_put(in(self)->sobjs, (void *) id, ss);
+    hashmap_put(in(me)->sobjs, (void *) id, ss);
 
     return ss;
 }
@@ -250,10 +241,10 @@ static arrayqueue_t* __register_new_sequenced_object(
  *
  * Fail when an obj is offered more than once in one seqnumber
  * 
- * @param id : the ID of the object
+ * @param id The ID of the object
  * @return 0 on error; otherwise 1. */
 int bfsequencer_offer_sobj(
-    bfs_t * self,
+    bfs_t * me,
     void *sobj,
     unsigned long id
 )
@@ -263,16 +254,16 @@ int bfsequencer_offer_sobj(
     sob_t *sob;
 
     /* check if we have this sequenced object */
-    if (!(ss = hashmap_get(in(self)->sobjs, (void *) id)))
+    if (!(ss = hashmap_get(in(me)->sobjs, (void *) id)))
     {
-        ss = __register_new_sequenced_object(self,id);
+        ss = __register_new_sequenced_object(me,id);
     }
     else
     {
         sob = arrayqueue_peektail(ss);
 
         /*  make sure we aren't adding twice in one sequence */
-        if (sob && sob->seqn == bfsequencer_get_last_offered_seqn(self))
+        if (sob && sob->seqn == bfsequencer_get_last_offered_seqn(me))
         {
             return 0;
         }
@@ -281,24 +272,24 @@ int bfsequencer_offer_sobj(
     /* append state */
     sob = calloc(1,sizeof(sob_t));
     sob->sobj = sobj;
-    sob->seqn = in(self)->seqn_newest;
+    sob->seqn = in(me)->seqn_newest;
     arrayqueue_offer(ss, sob);
     return 1;
 }
 
 /**
  * Get the last state of this sobj that was acked
- * @return null if none have been acked
- */
+ * @param id The ID of the object
+ * @return null if none have been acked */
 void *bfsequencer_get_last_acked_sobj_from_id(
-    bfs_t * self,
+    bfs_t * me,
     unsigned long id
 )
 {
     arrayqueue_t *ss;
     sob_t *sobj;
 
-    if (!(ss = hashmap_get(in(self)->sobjs, (void *) id)))
+    if (!(ss = hashmap_get(in(me)->sobjs, (void *) id)))
     {
         return NULL;
     }
@@ -316,10 +307,10 @@ void *bfsequencer_get_last_acked_sobj_from_id(
 }
 
 /**
- * @return last sobj before this seqn
- */
+ * @param id The ID of the object
+ * @return last sobj before this seqn */
 void *bfsequencer_get_last_sobj_from_id(
-    bfs_t * self,
+    bfs_t * me,
     unsigned long id,
     const int seqn
 )
@@ -327,7 +318,7 @@ void *bfsequencer_get_last_sobj_from_id(
     arrayqueue_iterator_t iter;
     arrayqueue_t *ss;
 
-    if (!(ss = hashmap_get(in(self)->sobjs, (void *) id)))
+    if (!(ss = hashmap_get(in(me)->sobjs, (void *) id)))
     {
         return NULL;
     }
@@ -350,25 +341,26 @@ void *bfsequencer_get_last_sobj_from_id(
 }
 
 /**
- * Acknowledged receipt, so delete archives up to this sequence number
+ * Acknowledged receipt, so delete archives up to sequence number
+ * @param ackseqn The sequence number
  */
 void bfsequencer_ack_seqn(
-    bfs_t * self,
+    bfs_t * me,
     const int ackseqn
 )
 {
     hashmap_iterator_t iter;
 
-    assert(in(self)->seqn_newest >= ackseqn);
+    assert(in(me)->seqn_newest >= ackseqn);
 
     /*  iterate throught all sobjs */
-    for (hashmap_iterator(in(self)->sobjs,&iter);
-            hashmap_iterator_has_next(in(self)->sobjs,&iter);)
+    for (hashmap_iterator(in(me)->sobjs,&iter);
+            hashmap_iterator_has_next(in(me)->sobjs,&iter);)
     {
         arrayqueue_t *ss;
         sob_t *sobj;
 
-        ss = hashmap_iterator_next_value(in(self)->sobjs,&iter);
+        ss = hashmap_iterator_next_value(in(me)->sobjs,&iter);
 
         do {
             sobj = arrayqueue_peek(ss);
@@ -380,7 +372,7 @@ void bfsequencer_ack_seqn(
             }
             else
             {
-                __sobj_release(self, arrayqueue_poll(ss));
+                __sobj_release(me, arrayqueue_poll(ss));
             }
         } while (1);
 
@@ -399,56 +391,53 @@ void bfsequencer_ack_seqn(
             }
             else
             {
-                __sobj_release(self, arrayqueue_poll(ss));
+                __sobj_release(me, arrayqueue_poll(ss));
             }
         }
 #endif
     }
 
 #if 0
-    for (in(self)->seqn_oldest;
-         in(self)->seqn_oldest < ackseqn; in(self)->seqn_oldest++)
+    for (in(me)->seqn_oldest;
+         in(me)->seqn_oldest < ackseqn; in(me)->seqn_oldest++)
     {
         hashmap_t *dic;
 
-        dic = arrayqueue_poll(in(self)->states);
-        tea_iter_forall(arrayqueue_iter(in(self)->states),
-                        in(self)->sobj_free_func);
+        dic = arrayqueue_poll(in(me)->states);
+        tea_iter_forall(arrayqueue_iter(in(me)->states),
+                        in(me)->sobj_free_func);
         hashmap_freeall(dic);
     }
 #endif
 }
 
-/*----------------------------------------------------------------------------*/
-
 /**
  * Increase the sequence number */
 void bfsequencer_increase_seqn(
-    bfs_t * self
+    bfs_t * me
 )
 {
 #if 0
     hashmap_t *dic;
 
     dic = hashmap_initalloc(&teaObjUlong);
-    arrayqueue_offer(in(self)->states, dic);
-    in(self)->seqn_newest++;
+    arrayqueue_offer(in(me)->states, dic);
+    in(me)->seqn_newest++;
 #endif
-    in(self)->seqn_newest++;
+    in(me)->seqn_newest++;
 }
 
-/*----------------------------------------------------------------------------*/
 int bfsequencer_iterator_datasends_to_send_has_next(
-    bfs_t * self,
+    bfs_t * me,
     bfs_datasend_iterator_t* iter 
 )
 {
-    while (hashmap_iterator_has_next(in(self)->sobjs, &iter->hmap_iter))
+    while (hashmap_iterator_has_next(in(me)->sobjs, &iter->hmap_iter))
     {
         sob_t *sobj;
         arrayqueue_t *ss;
 
-        ss = hashmap_iterator_peek_value(in(self)->sobjs,&iter->hmap_iter); 
+        ss = hashmap_iterator_peek_value(in(me)->sobjs,&iter->hmap_iter); 
 
         assert(ss);
         assert(0 < arrayqueue_count(ss));
@@ -458,7 +447,7 @@ int bfsequencer_iterator_datasends_to_send_has_next(
         /*  if it's been acked we don't need to send it! */
         if (sobj->isAcked)
         {
-            hashmap_iterator_next(in(self)->sobjs,&iter->hmap_iter);
+            hashmap_iterator_next(in(me)->sobjs,&iter->hmap_iter);
             continue;
         }
 
@@ -470,16 +459,16 @@ int bfsequencer_iterator_datasends_to_send_has_next(
 }
 
 void *bfsequencer_iterator_datasends_to_send_next(
-    bfs_t * self,
+    bfs_t * me,
     bfs_datasend_iterator_t* iter
 )
 {
-    if (bfsequencer_iterator_datasends_to_send_has_next(self,iter))
+    if (bfsequencer_iterator_datasends_to_send_has_next(me,iter))
     {
         sob_t *sobj;
         arrayqueue_t *ss;
         
-        ss = hashmap_iterator_next_value(in(self)->sobjs,&iter->hmap_iter);
+        ss = hashmap_iterator_next_value(in(me)->sobjs,&iter->hmap_iter);
         sobj = arrayqueue_peektail(ss);
         return sobj->sobj;
     }
@@ -488,9 +477,9 @@ void *bfsequencer_iterator_datasends_to_send_next(
 }
 
 void bfsequencer_iterator_datasends_to_send(
-    bfs_t * self,
+    bfs_t * me,
     bfs_datasend_iterator_t* iter
 )
 {
-    hashmap_iterator(in(self)->sobjs,&iter->hmap_iter);
+    hashmap_iterator(in(me)->sobjs,&iter->hmap_iter);
 }
